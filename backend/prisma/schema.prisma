@@ -1,0 +1,172 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String               @id @default(uuid())
+  email              String               @unique
+  password           String
+  firstName          String
+  lastName           String
+  phoneNumber        String?
+  profileImageUrl    String?
+  timezone           String               @default("UTC")
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  bandMemberships    BandMember[]
+  createdBands       Band[]               @relation("BandCreator")
+  availabilities     UserAvailability[]
+  exceptions         AvailabilityException[]
+  attendances        Attendance[]
+  notifications      Notification[]
+  createdRehearsals  Rehearsal[]          @relation("RehearsalCreator")
+  
+  @@map("users")
+}
+
+model Band {
+  id          String      @id @default(uuid())
+  name        String
+  description String?
+  logoUrl     String?
+  createdById String
+  createdBy   User        @relation("BandCreator", fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  members     BandMember[]
+  rehearsals  Rehearsal[]
+  
+  @@map("bands")
+}
+
+model BandMember {
+  id          String      @id @default(uuid())
+  userId      String
+  bandId      String
+  role        MemberRole  @default(MEMBER)
+  instrument  String?
+  joinedAt    DateTime    @default(now())
+  status      MemberStatus @default(ACTIVE)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  band        Band        @relation(fields: [bandId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, bandId])
+  @@map("band_members")
+}
+
+model UserAvailability {
+  id          String        @id @default(uuid())
+  userId      String
+  dayOfWeek   Int           // 0-6, where 0 is Sunday
+  startTime   String        // Format: HH:MM in 24-hour format
+  endTime     String        // Format: HH:MM in 24-hour format
+  recurrence  RecurrenceType @default(WEEKLY)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("user_availabilities")
+}
+
+model AvailabilityException {
+  id          String    @id @default(uuid())
+  userId      String
+  date        DateTime  // The date for this exception
+  isAvailable Boolean   // true if available, false if unavailable
+  startTime   String?   // Format: HH:MM in 24-hour format (if isAvailable is true)
+  endTime     String?   // Format: HH:MM in 24-hour format (if isAvailable is true)
+  reason      String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("availability_exceptions")
+}
+
+model Rehearsal {
+  id                String            @id @default(uuid())
+  bandId            String
+  location          String
+  startDatetime     DateTime
+  endDatetime       DateTime
+  isRecurring       Boolean           @default(false)
+  recurrencePattern Json?             // JSON object with recurrence details
+  createdById       String
+  notes             String?
+  goals             String?
+  status            RehearsalStatus   @default(SCHEDULED)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  band              Band              @relation(fields: [bandId], references: [id], onDelete: Cascade)
+  createdBy         User              @relation("RehearsalCreator", fields: [createdById], references: [id])
+  attendances       Attendance[]
+  notifications     Notification[]
+  
+  @@map("rehearsals")
+}
+
+model Attendance {
+  id            String            @id @default(uuid())
+  rehearsalId   String
+  userId        String
+  status        AttendanceStatus  @default(NO_RESPONSE)
+  reason        String?
+  updatedAt     DateTime          @updatedAt
+  rehearsal     Rehearsal         @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([rehearsalId, userId])
+  @@map("attendances")
+}
+
+model Notification {
+  id            String              @id @default(uuid())
+  userId        String
+  rehearsalId   String?
+  type          NotificationType
+  message       String
+  isRead        Boolean             @default(false)
+  createdAt     DateTime            @default(now())
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rehearsal     Rehearsal?          @relation(fields: [rehearsalId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
+}
+
+enum MemberRole {
+  ADMIN
+  MEMBER
+}
+
+enum MemberStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum RecurrenceType {
+  WEEKLY
+  BIWEEKLY
+}
+
+enum RehearsalStatus {
+  SCHEDULED
+  CANCELED
+  COMPLETED
+}
+
+enum AttendanceStatus {
+  CONFIRMED
+  DECLINED
+  TENTATIVE
+  NO_RESPONSE
+}
+
+enum NotificationType {
+  REMINDER
+  SCHEDULE_CHANGE
+  ANNOUNCEMENT
+}
